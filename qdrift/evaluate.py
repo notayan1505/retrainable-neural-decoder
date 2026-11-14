@@ -63,10 +63,14 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
                     model, info = load_checkpoint(p, dev)
                     extra = info.get("extra", {})
                     for key, requested in (("basis", basis), ("seed", seed), ("test_frac", test_frac)):
-                        if key in extra and extra[key] != requested:
+                        if key not in extra:
+                            raise ValueError(f"checkpoint {p} is missing {key} metadata; retrain it before evaluation")
+                        if extra[key] != requested:
                             raise ValueError(f"checkpoint {p} was trained with {key}={extra[key]!r}, "
                                              f"but evaluation requested {requested!r}")
-                    saved_strategy = extra.get("split_strategy", "iid")
+                    if "split_strategy" not in extra:
+                        raise ValueError(f"checkpoint {p} predates split metadata; retrain it before evaluation")
+                    saved_strategy = extra["split_strategy"]
                     if saved_strategy != split_strategy:
                         raise ValueError(f"checkpoint {p} was trained with split_strategy={saved_strategy!r}, "
                                          f"but evaluation requested {split_strategy!r}")
