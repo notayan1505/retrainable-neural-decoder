@@ -59,9 +59,17 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
                     model, info = load_checkpoint(p, dev)
                     cfg = TrainConfig(**{**info["cfg"], "device": str(dev)})
                     nns.append(NNDecoder(cfg, model=model, device=dev))
-        base_rows = run_baselines(train, test)
+        # Checkpoints trained with an inner validation holdout saw fewer optimizer samples.
+        # Fit the comparison baselines on that exact-size training partition as well.
+        baseline_train = train
+        if nns:
+            from qdrift.train import training_split_indices
+            cfg = nns[0].cfg
+            fit_idx, _ = training_split_indices(len(train), cfg.val_frac, cfg.seed + 1)
+            baseline_train = train.subset(fit_idx)
+        base_rows = run_baselines(baseline_train, test)
         for nn in nns:
-            base_rows.extend(run_baselines(train, test, decoders=[_Fitted(nn)]))
+            base_rows.extend(run_baselines(baseline_train, test, decoders=[_Fitted(nn)]))
         out.extend(_tag(base_rows, backend=backend, test_backend=backend, basis=basis or "all"))
         if test_backend and test_backend != backend:
             try:
@@ -72,7 +80,7 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
             tr2, te2 = split(ds2, test_frac, seed, strategy=split_strategy)
             train2, test2 = ds2.subset(tr2), ds2.subset(te2)
             decs = make_baselines(d, r)
-            fitted = [_Fitted(x.fit(train)) for x in decs] + [_Fitted(nn) for nn in nns]
+            fitted = [_Fitted(x.fit(baseline_train)) for x in decs] + [_Fitted(nn) for nn in nns]
             rows = run_baselines(train, test2, decoders=fitted)
             refit = [MatchingFitted(d, r, diagonals=True)]
             refit[0].name = "mwpm_refit"
