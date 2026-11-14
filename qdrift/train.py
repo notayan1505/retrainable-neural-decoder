@@ -1,6 +1,6 @@
 """Training loop for the neural decoders.
 
-RTX 5070 Ti (Blackwell, 16 GB) notes:
+RTX 5070 Ti (Blackwell, approximately 12 GB VRAM) notes:
   * Needs a CUDA 12.8+ torch build, e.g.
     ``pip install torch --index-url https://download.pytorch.org/whl/cu128``.
   * The whole dataset lives on the GPU as uint8; use large batches (8k-64k).
