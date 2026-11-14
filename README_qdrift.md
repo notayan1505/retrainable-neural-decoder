@@ -116,8 +116,9 @@ Sample size: the default `--shots 4096` with 4 chains gives 2 x 4 x 4096 = 32,76
 - `--device auto|cuda|mps|cpu` picks the device. The device and GPU name are printed at the start.
 
 ## Data facts
-- Only odd `r <= d` exist in the data. For d=3 that is r = 1 and 3.
-- The ibm_fez data was taken on 2025-08-25 and 2025-10-03.
+- ibm_fez has only odd `r <= d` (d=3: r = 1 and 3). ibm_kingston and ibm_pittsburgh also have some even r and some r > d (for example d=3, r=5 and 7). Run `python -m qdrift index` to see exactly what exists.
+- Dates: ibm_fez 2025-08-25 and 2025-10-03; ibm_kingston 2025-08-28 to 2025-10-08; ibm_pittsburgh 2025-09-02 to 2025-10-08.
+- Size after `parse`: fez 1.1M samples, kingston 10.3M, pittsburgh 9.3M (20,654,080 in total, matching the dataset README). The raw download unpacks to about 11 GB; the parsed cache is under 100 MB.
 - Logical state 1 is much noisier than state 0 (see `p_L|1` versus `p_L|0` in the tables).
 - Detectors fire often: about 5 to 30 percent of the time.
 - Train and test splits are fixed by `--seed` and `--test-frac`, per snapshot and state, so all decoders see the same test set.

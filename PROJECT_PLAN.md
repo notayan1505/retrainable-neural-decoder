@@ -226,15 +226,20 @@ and it does not yet beat fitted matching or the lookup table at d=3. That matche
 
 ### Facts found that change the plan
 - **Dates:** fez calibration dates are 2025-08-25 and 2025-10-03, not June 2026. The drift
-  gap to "today" is over a year. Fix the pitch wording. Kingston/Pittsburgh dates unchecked.
+  gap to "today" is over a year. Fix the pitch wording. Kingston: 2025-08-28 to 2025-10-08. Pittsburgh: 2025-09-02 to 2025-10-08.
 - **Noise is high and lopsided:** detector rates 5–30%. In Z basis state 1 is far worse than
   state 0 (raw `q_0` error at d=11, r=11: 0.9% vs 47%). Report per state; splits are balanced
   by state.
-- **Coverage:** only odd r with r ≤ d. d=3 has r=1 and r=3 only.
+- **Coverage:** fez has only odd r ≤ d. Kingston and pittsburgh also have some even r (kingston d=5 r=2,4; d=9 r=2,4) and r > d (kingston d=3 r=5; pittsburgh d=3 r=5,7, d=5 r=7).
 - **`index.csv` is not on Zenodo.** `qdrift.data.stein.build_index` rebuilds it.
 - **Shot counts:** README says 3,779,584 shots / 20,654,080 samples in total (the plan's
   "2.7M" is out of date). Fez: 164,864 shots, 1,099,776 samples, both confirmed.
-- Only `ibm_fez` (9 MB) is downloaded and parsed (`data/raw/ibm_fez/`, `data/parsed/ibm_fez/`).
+- All three backends downloaded and parsed (2026-11-14, cloud session): 20,654,080 samples, exactly the README total. Raw unpacks to ~11 GB; parsed cache < 100 MB.
+
+### Kingston + pittsburgh baselines (2026-11-14, `results/qdrift/baseline_ibm_{kingston,pittsburgh}_d*.csv`)
+- **The lookup table beats matching by a lot wherever it fits** (d=3 up to r=7, d=5 up to r=5): kingston d=5 r=5: lookup 2.22% vs fitted 3.65% / equal 3.52%; kingston d=3 r=5: 2.75% vs 5.00% / 8.36%; pittsburgh d=3 r=7: 2.44% vs 4.41%. The noise has structure a matching graph cannot express (correlated errors, leakage-like effects). That is the room a neural decoder can learn into, and the best argument for the NN at d ≥ 7 where no lookup table fits.
+- **Fitted weights do not beat equal weights at r ≥ 5 on kingston, and barely on pittsburgh** (kingston d=11 r=11: equal 8.83%, fitted 9.21%). This is NOT caused by pooling: fitting per snapshot (9.23%) or per chain (9.80%) is no better. The pairwise estimator itself breaks down at these noise rates. For the pitch: compare the NN against the better of `mwpm_equal` and `mwpm_fitted` per config, and say so.
+- `mwpm_equal` is worse than no decoding at kingston d=3 r=5 (8.36% vs 7.86%). Not investigated.
 
 ### Design decisions made
 - One sample = one (shot, chain). Label = `q_0 XOR prepared state`. Same rule for X and Z.
