@@ -177,6 +177,33 @@ a small `train` run completes on CPU/MPS.
 
 ## STATUS / HANDOFF (updated 2026-11-14, ~14:15) — read this first when resuming
 
+### Update 2026-11-14 (evening) — folder synced to the GitHub repo
+- **Source of truth for code is now the GitHub repo** `notayan1505/retrainable-neural-decoder`
+  (local clone: `../retrainable-neural-decoder`). This `QuantUM` folder was synced to it
+  (`qdrift/`, `tests/qdrift/`, READMEs, `.gitignore`, `LICENSE`, `results/qdrift/*.csv`); `gosc/` untouched.
+  `qdrift_transfer.zip` is now stale; clone the repo on the 5070 Ti laptop instead.
+- Repo changes since the zip (PRs #1–#4): `--split-strategy iid|chain|snapshot`, NN and baselines
+  matched on training-sample counts, checkpoint validation split reproduced in `evaluate`, and the
+  **boundary floor is now off by default** (it was picked on test data; opt in explicitly).
+- **Open PR #7** fixes `python -m qdrift evaluate`, which crashed on every call on `main`
+  (missing `--split-strategy` on the evaluate parser). This folder already includes the fix.
+- Numbers below that mention the boundary floor are from before it was turned off. Current fez
+  defaults: d=3 r=3 fitted 3.37%, lookup 3.40%; d=5 r=5 equal 5.88%, fitted 6.20%, lookup 5.16%;
+  d=7 r=5 equal 2.73%, fitted 2.80%; d=9 r=7 equal 5.06%, fitted 5.15%.
+- Next: to-do items 6 and 7 below (5070 Ti laptop; IBM token).
+
+### Update 2026-11-14 (later session) — supersedes to-do items 1–5 below
+- Tasks 5 and 7 are now **reviewed**. Fake drift check ran end to end (`run-ibm` → `parse ibm_fez_fake` →
+  `evaluate --test-backend ibm_fez_fake`); output in `results/qdrift/eval_ibm_fez_on_ibm_fez_fake.*`.
+- Fixed: (a) `evaluate` failed on a checkpoint trained on another device (cuda checkpoint on the Mac);
+  it now uses the local device. (b) `evaluate --test-backend X` with no data for X now exits with an
+  error instead of writing a blank plot. (c) simulated `run-ibm` refuses a `*_fresh` label (reserved
+  for real hardware). (d) README drift example corrected; plot x ticks are whole numbers.
+- **70 tests pass** (two runs, no segfault). Code-only bundle: `qdrift_transfer.zip` (rebuild it if code changes).
+- Not verified (no CUDA here): bf16 autocast with `--kind gru` (use `--no-amp` if it errors), `--compile`,
+  and `run-ibm --real`. The fake chip is far quieter than real fez (detector rate 2–5% vs 11–16%).
+- Next: to-do items 6 and 7 below.
+
 ### Progress by build task
 | # | Task | State | Where |
 |---|---|---|---|
