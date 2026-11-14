@@ -1,6 +1,6 @@
 # Learning a Chip's Noise: A Neural Decoder Trained on Real IBM Data
 
-QuantUM Qiskit Fall Fest 2026 · 3-hour build · status: plan v3, approved to build. This file is the single source of truth.
+QuantUM Qiskit Fall Fest 2026 · 3-hour build · status: review revision. This file is the single source of truth.
 
 ## Goal
 A neural decoder trained on **real IBM hardware data** and compared fairly against PyMatching,
@@ -75,13 +75,20 @@ with weight `w = log((1−p)/p)`. Fit it on the **training** split only.
   Show binomial error bars.
 - **Learning curve:** plot test error vs. training-set size for the NN (and the lookup
   table). It shows where learning beats fitting.
-- **Strict splits:** fitted weights, lookup table and NN all train on the same training split
-  and are tested on the same held-out runs.
+- **Strict splits:** fitted weights, lookup table and NN all train on the same effective
+  training samples and are tested on the same held-out runs.
+- **Validation:** reserve an inner validation partition from the outer training set. Use it for
+  model selection and hyperparameters; never select variants using the final test set.
+- **Generalization:** report IID results separately from held-out-chain and held-out-snapshot
+  results. IID shots from the same chain/snapshot are not independent evidence of calibration
+  transfer.
+- **Uncertainty:** current standard errors are shot-level binomial estimates. Because shots
+  share chains and snapshots, cluster-aware bootstrap intervals are needed for final claims.
 
-## How we differ from Stein et al. (we cite them, we don't claim "first")
+## Scope and how we differ from Stein et al. (we cite them, we don't claim "first")
 Stein et al. already trained neural decoders on this data. Their key idea is
 **calibration-conditioned FiLM**, which feeds the chip's calibration numbers into the network.
-Our contribution:
+This repository currently implements a **1D repetition code**, not a 2D surface code. A surface-code claim would require a 2D lattice, both stabilizer types, and the corresponding 2D space-time syndrome graph. Our contribution:
 1. **Fresh-hardware drift test:** decoders trained on their June runs, tested on our new
    November runs on the same chips. How much does performance decay, and does refitting
    matching weights or fine-tuning the NN recover it?
@@ -109,7 +116,7 @@ Our contribution:
 data. The `.venv` in the project root already has qiskit 2.6, qiskit-aer 0.18,
 qiskit-ibm-runtime 0.52, stim 1.16, PyMatching 2.4, torch 2.15 and numpy.
 
-**Training machine:** a separate laptop with an **NVIDIA RTX 5070 Ti** (Blackwell, sm_120, 16 GB).
+**Training machine:** a separate laptop with an **NVIDIA RTX 5070 Ti** (Blackwell, sm_120, approximately 12 GB VRAM).
 The code is copied over and run there. Its OS is unknown, so everything must work on
 **Windows and Linux**: use `pathlib`, no shell-specific scripts, `num_workers=0`.
 
@@ -118,7 +125,7 @@ The code is copied over and run there. Its OS is unknown, so everything must wor
   `pip install torch --index-url https://download.pytorch.org/whl/cu128` (or newer). Older
   builds fail with "no kernel image".
 - **Put the whole dataset on the GPU.** It is a few million samples of ≤ 120 bits each, so it
-  fits easily in 16 GB as uint8. Shuffle with `torch.randperm` on the device. No DataLoader.
+  fits in approximately 12 GB as uint8, subject to model and batch memory. Shuffle with `torch.randperm` on the device. No DataLoader.
 - **Large batches** (8k–64k), **bf16 autocast**, `torch.backends.cuda.matmul.allow_tf32 = True`
   and AdamW with OneCycle LR.
 - **`torch.compile` behind a `--compile` flag**, off by default. On Windows it needs Triton,
@@ -208,7 +215,7 @@ pytest passes, `python -m qdrift baseline --d 3` prints tables and writes
    learning curves. Nothing has been trained beyond one 6-second smoke run.
 7. When a token exists: `run-ibm --real` for the drift test. Until then only fake backends.
 
-### First numbers (real ibm_fez, X and Z pooled, 75/25 split per snapshot and state)
+### Historical exploratory numbers (real ibm_fez, X and Z pooled, 75/25 IID split per snapshot and state)
 d=3, r=3, 69,120 train / 23,040 test samples, before the boundary-floor fix:
 | decoder | logical error | ± | state 0 | state 1 |
 |---|---:|---:|---:|---:|
@@ -218,7 +225,7 @@ d=3, r=3, 69,120 train / 23,040 test samples, before the boundary-floor fix:
 | lookup | 3.40% | 0.12 | 1.28% | 5.53% |
 | MLP (15 epochs, MPS, 5.8 s) | 4.02% | – | – | – |
 
-After the boundary-floor fix `mwpm_fitted` is 3.54% at d=3, r=3 (about one standard error
+These historical figures used the now-disabled boundary-floor heuristic and are not independent final test results. After that heuristic was introduced, `mwpm_fitted` was 3.54% at d=3, r=3 (about one standard error
 worse) and clearly better at larger sizes: d=7, r=5: 2.31% (was 2.80%; equal weights 2.73%);
 d=11, r=11: 9.69% (was 12.71%; equal weights 10.13%). The MLP above is a smoke run, not tuned,
 and it does not yet beat fitted matching or the lookup table at d=3. That matches the
@@ -243,11 +250,11 @@ and it does not yet beat fitted matching or the lookup table at d=3. That matche
   more data is added.
 - Fitted matching pools all chains and both bases of a config into one graph. A per-chain
   fit would be a stronger baseline. Not done.
-- **Boundary floor** (`fit_edge_probs(boundary_floor=True)`): the pairwise estimator gave
-  zero or negative chain-end probabilities on real data, making fitted matching worse than
-  equal weights from d=7 up. Chain-end probabilities are now floored at the row's median
-  space-edge probability. Caveat: this rule was picked after comparing variants on the test
-  split (differences were within noise).
+- **Boundary floor** (`fit_edge_probs(boundary_floor=True)`): this optional heuristic floors
+  chain-end probabilities at the row's median space-edge probability. It was selected after
+  comparing variants on the former test split, so it is now disabled by default. Results
+  produced with the old default are exploratory and must be rerun before being treated as
+  independent test results.
 - Fresh/fake IBM runs are stored under their own backend label (`ibm_fez_fake`,
   `ibm_fez_fresh`) so they never mix with Stein's `ibm_fez`.
 - `find_chains` picks chains from the coupling map only. It does not avoid bad qubits using
@@ -269,6 +276,20 @@ and it does not yet beat fitted matching or the lookup table at d=3. That matche
   not load qiskit-aer, so it is unaffected.
 - Other pitfalls hit: plain `pytest` could not import `qdrift` without the project root on
   `sys.path` (conftest now adds it); run `python -m qdrift` from the project root.
+
+### Review revision (2026-11-14)
+
+- Added `split(..., strategy="iid"|"chain"|"snapshot")`. IID preserves the former split;
+  chain holds out complete physical chains within each snapshot; snapshot holds out entire
+  calibration sessions. Grouped strategies fail clearly when too few groups are available.
+- Neural training now receives an explicit validation dataset. Comparison baselines use the
+  exact same optimizer-training partition, and learning curves report effective optimizer
+  sample counts rather than the outer subset size.
+- Checkpoint evaluation reconstructs the same inner validation partition before fitting
+  baselines, so sample counts remain comparable.
+- The boundary floor is now opt-in and disabled by default because its original selection
+  used the former test split.
+- The standard errors remain shot-level binomial estimates, not cluster-aware intervals.
 
 ### Rules still in force
 - Do not touch `gosc/`. No real IBM submissions (no token yet). No training on the Mac.
