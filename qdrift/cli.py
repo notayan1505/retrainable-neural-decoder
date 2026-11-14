@@ -395,7 +395,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--backend", default="ibm_fez")
     s.add_argument("--configs", required=True)
     s.add_argument("--basis", choices=["X", "Z"], default="Z")
-    s.add_argument("--shots", type=int, default=1024)
+    s.add_argument("--shots", type=int, default=4096,
+                   help="shots per circuit; ~4096 gives >4000 test samples per config at 4 chains")
     s.add_argument("--n-chains", type=int, default=4)
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--real", action="store_true", help="use real hardware (needs QISKIT_IBM_TOKEN)")

@@ -71,7 +71,7 @@ python -m qdrift train --backend ibm_fez --d 7 --r 5 --learning-curve --fraction
 python -m qdrift evaluate --backend ibm_fez --configs 3x3,7x5,9x7
 
 # 9. Generate fresh data on the FAKE (simulated) ibm_fez: safe, no account needed
-python -m qdrift run-ibm --backend ibm_fez --configs 3x3,7x5 --shots 1024
+python -m qdrift run-ibm --backend ibm_fez --configs 3x3,7x5 --shots 4096
 ```
 
 ### Drift test flow
@@ -100,6 +100,14 @@ python -m qdrift train --backend ibm_fez_fresh --d 7 --r 5 --init results/qdrift
 ```
 (One line on purpose: the same command works in PowerShell and bash.)
 
+Score the fine-tuned network on the same fresh test split as the drift table (the split is fixed by `--seed`, so it is the identical test set):
+```bash
+python -m qdrift evaluate --backend ibm_fez_fresh --configs 7x5 --basis Z
+```
+Its `nn_mlp` row is the fine-tuned network. Compare it with `nn_mlp` from the drift table (trained on old data only) and with `mwpm_refit`.
+
+Sample size: the default `--shots 4096` with 4 chains gives 2 x 4 x 4096 = 32,768 samples per config, so about 8,000 in the 25% test split. That is enough to resolve a 1-point difference. With `--shots 1024` the test split is only about 2,000. Error bars in the plots are Wilson intervals (68%, the same coverage as +-1 standard error), which stay honest when a decoder makes 0 errors; the `+-` column in the tables is still the plain standard error.
+
 ## GPU settings
 - The whole dataset is moved to the GPU once. Use big batches: 8k to 64k (`--batch-size`).
 - On CUDA, bf16 autocast and TF32 are on. Turn off with `--no-amp`.
@@ -108,8 +116,9 @@ python -m qdrift train --backend ibm_fez_fresh --d 7 --r 5 --init results/qdrift
 - `--device auto|cuda|mps|cpu` picks the device. The device and GPU name are printed at the start.
 
 ## Data facts
-- Only odd `r <= d` exist in the data. For d=3 that is r = 1 and 3.
-- The ibm_fez data was taken on 2025-08-25 and 2025-10-03.
+- ibm_fez has only odd `r <= d` (d=3: r = 1 and 3). ibm_kingston and ibm_pittsburgh also have some even r and some r > d (for example d=3, r=5 and 7). Run `python -m qdrift index` to see exactly what exists.
+- Dates: ibm_fez 2025-08-25 and 2025-10-03; ibm_kingston 2025-08-28 to 2025-10-08; ibm_pittsburgh 2025-09-02 to 2025-10-08.
+- Size after `parse`: fez 1.1M samples, kingston 10.3M, pittsburgh 9.3M (20,654,080 in total, matching the dataset README). The raw download unpacks to about 11 GB; the parsed cache is under 100 MB.
 - Logical state 1 is much noisier than state 0 (see `p_L|1` versus `p_L|0` in the tables).
 - Detectors fire often: about 5 to 30 percent of the time.
 - Train and test splits are fixed by `--seed` and `--test-frac`, per snapshot and state, so all decoders see the same test set.

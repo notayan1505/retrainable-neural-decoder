@@ -292,6 +292,21 @@ def logical_error(pred, labels) -> dict:
     return {"n": n, "errors": errors, "p_L": p, "stderr": stderr}
 
 
+def wilson_interval(errors, n, z=1.0) -> tuple[float, float]:
+    """Wilson score interval for a binomial rate (z=1: about 68%, the same coverage as +-1 stderr).
+
+    Unlike p +- stderr it never collapses to zero width when errors == 0 (or n), so small fresh
+    test sets still get honest error bars.
+    """
+    if not n:
+        return float("nan"), float("nan")
+    p = errors / n
+    den = 1.0 + z * z / n
+    mid = (p + z * z / (2 * n)) / den
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den
+    return max(mid - half, 0.0), min(mid + half, 1.0)
+
+
 def error_per_round(p_L, r) -> float:
     if not (p_L < 0.5):
         return 0.5
