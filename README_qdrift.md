@@ -124,8 +124,8 @@ Sample size: the default `--shots 4096` with 4 chains gives 2 x 4 x 4096 = 32,76
 - Train and test splits are fixed by `--seed` and `--test-frac`, per snapshot and state, so all decoders see the same test set.
 
 ## Reproducibility notes
-- Checkpoints now use basis-specific names (`all`, `x`, or `z`) and record the outer split strategy, seed, and test fraction.
-- Evaluation refuses mismatched or incomplete split metadata. Retrain checkpoints created before this change before using them with the updated evaluator.
+- Checkpoints now use basis-specific names (`all`, `x`, or `z`) and record the dataset fingerprint, outer split strategy, seed, and test fraction.
+- Evaluation refuses changed datasets and mismatched or incomplete split metadata. Retrain checkpoints created before this change before using them with the updated evaluator.
 - New hardware and simulated runs are restricted to canonical `<backend>_fresh` and `<backend>_fake` labels.
 
 ## Tests

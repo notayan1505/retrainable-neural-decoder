@@ -4,6 +4,7 @@ Raw files are untrusted: they are only ever read with ``json.loads``.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -51,6 +52,20 @@ class Dataset:
             self.detectors[idx], self.labels[idx], self.states[idx], self.data[idx],
             self.chain[idx], self.snapshot[idx], self.metas,
         )
+
+
+def dataset_fingerprint(ds: Dataset) -> str:
+    """Stable SHA-256 identity for the exact parsed dataset used by a decoder."""
+    digest = hashlib.sha256()
+    for name in ("detectors", "labels", "states", "data", "chain", "snapshot"):
+        arr = np.ascontiguousarray(getattr(ds, name))
+        digest.update(name.encode("utf-8") + b"\\0")
+        digest.update(arr.dtype.str.encode("ascii") + b"\\0")
+        digest.update(np.asarray(arr.shape, dtype=np.int64).tobytes())
+        digest.update(memoryview(arr).cast("B"))
+    meta = json.dumps(ds.metas, sort_keys=True, separators=(",", ":"), default=str)
+    digest.update(meta.encode("utf-8"))
+    return digest.hexdigest()
 
 
 # ----------------------------------------------------------------------------- core math

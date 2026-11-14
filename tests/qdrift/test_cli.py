@@ -52,6 +52,9 @@ def test_train_eval_init_curve(parsed_tree, tmp_path, capsys):
               "--width", "16", "--depth", "1", "--batch-size", "256"]
     assert main(["train", *common, "--out", str(ck / "synthA_d3_r3_mlp.pt")]) == 0
     assert (ck / "synthA_d3_r3_mlp.pt").exists()
+    import torch
+    saved = torch.load(ck / "synthA_d3_r3_mlp.pt", map_location="cpu", weights_only=True)
+    assert len(saved["extra"]["dataset_fingerprint"]) == 64
     capsys.readouterr()
     od = tmp_path / "ev"
     assert main(["evaluate", "--backend", "synthA", "--configs", "3x3", *_args(t), "--ckpt-dir", str(ck),

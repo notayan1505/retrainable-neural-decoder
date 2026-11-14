@@ -140,7 +140,7 @@ def cmd_train(a) -> int:
     import torch
     from qdrift.decoders.baselines import format_table
     from qdrift.evaluate import (baseline_learning_curve, evaluate_config, plot_learning_curve, write_csv)
-    from qdrift.data.stein import split
+    from qdrift.data.stein import dataset_fingerprint, split
     from qdrift.train import (NNDecoder, TrainConfig, learning_curve, load_checkpoint, pick_device,
                               save_checkpoint, train_model)
     backends = _csv_list(a.backend)
@@ -191,7 +191,9 @@ def cmd_train(a) -> int:
     print(format_table(rows))
     ckpt = Path(a.out) if a.out else RESULTS / "checkpoints" / f"{stem}.pt"
     save_checkpoint(ckpt, model, cfg, a.d, a.r, extra={"backend": tag, "basis": a.basis, "seed": a.seed,
-                                                       "test_frac": a.test_frac, "split_strategy": a.split_strategy, "init": a.init})
+                                                       "test_frac": a.test_frac, "split_strategy": a.split_strategy,
+                                                       "dataset_fingerprint": dataset_fingerprint(ds),
+                                                       "init": a.init})
     write_csv(hist, ckpt.with_name(ckpt.stem + "_history.csv"))
     write_csv(rows, ckpt.with_name(ckpt.stem + "_rows.csv"))
     print(f"saved checkpoint {ckpt}")

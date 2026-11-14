@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from qdrift.data.stein import DEFAULT_PARSED, Dataset, load_dataset, split
+from qdrift.data.stein import DEFAULT_PARSED, Dataset, dataset_fingerprint, load_dataset, split
 from qdrift.decoders.baselines import (LookupTable, MatchingFitted, error_per_round, logical_error,
                                        make_baselines, run_baselines, wilson_interval)
 
@@ -62,7 +62,11 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
                     dev = pick_device(device)
                     model, info = load_checkpoint(p, dev)
                     extra = info.get("extra", {})
-                    for key, requested in (("basis", basis), ("seed", seed), ("test_frac", test_frac)):
+                    expected_metadata = {
+                        "basis": basis, "seed": seed, "test_frac": test_frac,
+                        "dataset_fingerprint": dataset_fingerprint(ds),
+                    }
+                    for key, requested in expected_metadata.items():
                         if key not in extra:
                             raise ValueError(f"checkpoint {p} is missing {key} metadata; retrain it before evaluation")
                         if extra[key] != requested:
