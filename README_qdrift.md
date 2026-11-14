@@ -112,7 +112,17 @@ python -m qdrift train --backend ibm_fez_fresh --d 7 --r 5 --init results/qdrift
 - The ibm_fez data was taken on 2025-08-25 and 2025-10-03.
 - Logical state 1 is much noisier than state 0 (see `p_L|1` versus `p_L|0` in the tables).
 - Detectors fire often: about 5 to 30 percent of the time.
-- Train and test splits are fixed by `--seed` and `--test-frac`, per snapshot and state, so all decoders see the same test set.
+- The default `--split-strategy iid` split is fixed by `--seed` and `--test-frac`, per snapshot and prepared state. For stronger generalization tests, use `--split-strategy chain` (hold out complete physical chains) or `--split-strategy snapshot` (hold out complete calibration snapshots). Grouped modes require enough independent groups to populate both train and test.
+
+For `train`, 10% of the outer training partition is reserved for validation by default (`--val-frac 0.1`). The neural network and comparison baselines are fitted on the same remaining samples; validation samples are not counted as optimizer-training samples. The learning-curve mode applies the same inner holdout to both neural and matching baselines.
+
+## Scope and evaluation caveats
+
+This repository implements a **1D repetition-code** decoder, not a 2D surface-code decoder. It does not yet implement both surface-code stabilizer types or a 2D space-time syndrome graph.
+
+Older result CSVs and numbers generated before this review are exploratory: the boundary-probability floor was selected after comparing variants on the former test split. The floor is now disabled by default. Re-run experiments with the updated code before presenting those numbers as independent test results. Report the split strategy with every result; IID splits measure more shots under familiar snapshots, while chain and snapshot splits test stronger forms of transfer.
+
+The reported binomial standard errors currently treat shots as independent. Since shots are grouped by physical chain and calibration snapshot, they can understate uncertainty; cluster-aware confidence intervals remain future work.
 
 ## Tests
 ```bash
