@@ -40,11 +40,11 @@ def _tag(rows, **kw):
 
 
 def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, test_frac=0.25, seed=0,
-             parsed_dir=DEFAULT_PARSED, device=None) -> list[dict]:
+             parsed_dir=DEFAULT_PARSED, device=None, split_strategy="iid") -> list[dict]:
     out: list[dict] = []
     for d, r in configs:
         ds = load_dataset(backend, d, r, basis, parsed_dir=parsed_dir)
-        tr_i, te_i = split(ds, test_frac, seed)
+        tr_i, te_i = split(ds, test_frac, seed, strategy=split_strategy)
         train, test = ds.subset(tr_i), ds.subset(te_i)
         nns = []
         if ckpt_dir is not None:
@@ -59,9 +59,16 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
                     model, info = load_checkpoint(p, dev)
                     cfg = TrainConfig(**{**info["cfg"], "device": str(dev)})
                     nns.append(NNDecoder(cfg, model=model, device=dev))
-        base_rows = run_baselines(train, test)
+        # Checkpoints trained with an inner validation holdout saw fewer optimizer samples.
+        # Fit the comparison baselines on that exact-size training partition as well.
+        baseline_train = train
+        if nns:
+            cfg = nns[0].cfg
+            fit_idx, _ = split(train, cfg.val_frac, cfg.seed + 1, strategy=split_strategy)
+            baseline_train = train.subset(fit_idx)
+        base_rows = run_baselines(baseline_train, test)
         for nn in nns:
-            base_rows.extend(run_baselines(train, test, decoders=[_Fitted(nn)]))
+            base_rows.extend(run_baselines(baseline_train, test, decoders=[_Fitted(nn)]))
         out.extend(_tag(base_rows, backend=backend, test_backend=backend, basis=basis or "all"))
         if test_backend and test_backend != backend:
             try:
@@ -69,10 +76,10 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
             except ValueError as e:
                 print(f"note: skipping d={d} r={r}: no data for test backend {test_backend} ({e})")
                 continue
-            tr2, te2 = split(ds2, test_frac, seed)
+            tr2, te2 = split(ds2, test_frac, seed, strategy=split_strategy)
             train2, test2 = ds2.subset(tr2), ds2.subset(te2)
             decs = make_baselines(d, r)
-            fitted = [_Fitted(x.fit(train)) for x in decs] + [_Fitted(nn) for nn in nns]
+            fitted = [_Fitted(x.fit(baseline_train)) for x in decs] + [_Fitted(nn) for nn in nns]
             rows = run_baselines(train, test2, decoders=fitted)
             refit = [MatchingFitted(d, r, diagonals=True)]
             refit[0].name = "mwpm_refit"
@@ -85,16 +92,18 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
     return out
 
 
-def baseline_learning_curve(train: Dataset, test: Dataset, fractions, seed=0) -> list[dict]:
-    from qdrift.train import learning_curve_subsets
+def baseline_learning_curve(train: Dataset, test: Dataset, fractions, seed=0, val_frac=0.1) -> list[dict]:
+    from qdrift.train import learning_curve_subsets, training_split_indices
     rows = []
     for f, idx in learning_curve_subsets(len(train.labels), fractions, seed):
         sub = train.subset(idx)
+        fit_idx, _ = training_split_indices(len(idx), val_frac, seed)
+        fit = sub.subset(fit_idx)
         decs = [x for x in make_baselines(train.d, train.r) if x.name in ("mwpm_fitted", "lookup")]
         for dec in decs:
-            dec.fit(sub)
+            dec.fit(fit)
             le = logical_error(dec.predict(test.detectors), test.labels)
-            rows.append({"decoder": dec.name, "fraction": float(f), "n_train": int(len(idx)),
+            rows.append({"decoder": dec.name, "fraction": float(f), "n_train": int(len(fit)),
                          "n_test": le["n"], "errors": le["errors"], "p_L": le["p_L"], "stderr": le["stderr"]})
     return rows
 

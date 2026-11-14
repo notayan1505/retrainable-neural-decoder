@@ -67,7 +67,7 @@ def test_learning_curve(ds):
     for row in rows:
         assert set(row) == {"decoder", "fraction", "n_train", "n_test", "errors", "p_L", "stderr"}
         assert row["decoder"] == "nn_mlp"
-    assert rows[0]["n_train"] < rows[1]["n_train"] == len(tr)
+    assert rows[0]["n_train"] < rows[1]["n_train"] < len(tr)
 
 
 def test_nndecoder_and_empty(ds):

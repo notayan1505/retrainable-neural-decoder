@@ -53,10 +53,10 @@ def _describe(ds) -> str:
             f"dates={','.join(dates) or 'n/a'} samples={len(ds)}")
 
 
-def _load_split(backends, d, r, basis, parsed_dir, test_frac, seed):
+def _load_split(backends, d, r, basis, parsed_dir, test_frac, seed, split_strategy='iid'):
     from qdrift.data.stein import load_dataset, split
     ds = load_dataset(backends, d, r, basis, parsed_dir=parsed_dir)
-    tr, te = split(ds, test_frac, seed)
+    tr, te = split(ds, test_frac, seed, strategy=split_strategy)
     return ds, ds.subset(tr), ds.subset(te)
 
 
@@ -117,7 +117,7 @@ def cmd_baseline(a) -> int:
     rs = [a.r] if a.r is not None else _available_r(backends, a.d, a.parsed_dir, a.basis)
     all_rows = []
     for r in rs:
-        ds, train, test = _load_split(backends, a.d, r, a.basis, a.parsed_dir, a.test_frac, a.seed)
+        ds, train, test = _load_split(backends, a.d, r, a.basis, a.parsed_dir, a.test_frac, a.seed, a.split_strategy)
         print(f"\n[d={a.d} r={r}] {_describe(ds)}")
         rows = evaluate_config(train, test)
         for row in rows:
@@ -133,13 +133,14 @@ def _make_cfg(a, TrainConfig):
     return TrainConfig(kind=a.kind, width=a.width, depth=a.depth, dropout=a.dropout, epochs=a.epochs,
                        batch_size=a.batch_size, lr=a.lr, weight_decay=a.weight_decay,
                        device=None if a.device == "auto" else a.device, compile=a.compile,
-                       amp=not a.no_amp, seed=a.seed)
+                       amp=not a.no_amp, seed=a.seed, val_frac=a.val_frac)
 
 
 def cmd_train(a) -> int:
     import torch
     from qdrift.decoders.baselines import format_table
     from qdrift.evaluate import (baseline_learning_curve, evaluate_config, plot_learning_curve, write_csv)
+    from qdrift.data.stein import split
     from qdrift.train import (NNDecoder, TrainConfig, learning_curve, load_checkpoint, pick_device,
                               save_checkpoint, train_model)
     backends = _csv_list(a.backend)
@@ -157,7 +158,7 @@ def cmd_train(a) -> int:
             if "no kernel image" in str(e):
                 print(CU128_HINT, file=sys.stderr)
             raise
-    ds, train, test = _load_split(backends, a.d, a.r, a.basis, a.parsed_dir, a.test_frac, a.seed)
+    ds, train, test = _load_split(backends, a.d, a.r, a.basis, a.parsed_dir, a.test_frac, a.seed, a.split_strategy)
     print(_describe(ds))
     init_model = None
     if a.init:
@@ -172,18 +173,20 @@ def cmd_train(a) -> int:
         if a.learning_curve:
             fr = _fractions(a.fractions)
             rows = learning_curve(train, test, cfg, fr, log=print)
-            rows += baseline_learning_curve(train, test, fr, seed=cfg.seed)
+            rows += baseline_learning_curve(train, test, fr, seed=cfg.seed, val_frac=cfg.val_frac)
             csv_path = write_csv(rows, RESULTS / f"learning_curve_{stem}.csv")
             png = plot_learning_curve(rows, csv_path.with_suffix(".png"))
             print(f"wrote {csv_path}\nwrote {png}")
             return 0
-        model, hist = train_model(train, cfg, log=print, model=init_model)
+        fit_idx, val_idx = split(train, cfg.val_frac, cfg.seed + 1, strategy=a.split_strategy)
+        fit_train, val = train.subset(fit_idx), train.subset(val_idx)
+        model, hist = train_model(fit_train, cfg, val=val, log=print, model=init_model)
     except RuntimeError as e:
         if "no kernel image" in str(e):
             print(CU128_HINT, file=sys.stderr)
         raise
     nn = NNDecoder(cfg, model=model, device=dev)
-    rows = evaluate_config(train, test, nn)
+    rows = evaluate_config(fit_train, test, nn)
     print(format_table(rows))
     ckpt = Path(a.out) if a.out else RESULTS / "checkpoints" / f"{stem}.pt"
     save_checkpoint(ckpt, model, cfg, a.d, a.r, extra={"backend": tag, "basis": a.basis, "seed": a.seed,
@@ -207,6 +210,8 @@ _TRAIN_OPTS = [  # (dest, flag, type, default, help); type None = store_true
     ("compile", "--compile", None, False, "torch.compile (needs Triton on Windows)"),
     ("no_amp", "--no-amp", None, False, "disable bf16 autocast"),
     ("seed", "--seed", int, 0, "random seed"),
+    ("val_frac", "--val-frac", float, 0.1, "fraction of outer training data reserved for validation"),
+    ("split_strategy", "--split-strategy", str, "iid", "iid, chain, or snapshot split"),
     ("test_frac", "--test-frac", float, 0.25, "test fraction"),
     ("init", "--init", str, None, "start from this checkpoint (fine-tuning)"),
     ("learning_curve", "--learning-curve", None, False, "run a learning curve instead of one fit"),
@@ -279,7 +284,8 @@ def cmd_evaluate(a) -> int:
     from qdrift.evaluate import RESULTS as RES, evaluate, plot_error_vs_d, write_csv
     configs = _parse_configs(a.configs)
     rows = evaluate(a.backend, configs, basis=a.basis, ckpt_dir=a.ckpt_dir, test_backend=a.test_backend,
-                    test_frac=a.test_frac, seed=a.seed, parsed_dir=a.parsed_dir, device=a.device)
+                    test_frac=a.test_frac, seed=a.seed, parsed_dir=a.parsed_dir, device=a.device,
+                    split_strategy=a.split_strategy)
     if a.test_backend and a.test_backend != a.backend and not any(r["test_backend"] == a.test_backend for r in rows):
         raise ValueError(f"no parsed data for test backend {a.test_backend!r} at configs {a.configs}; nothing to "
                          f"score. Run `python -m qdrift parse {a.test_backend}` or check `python -m qdrift index`.")
@@ -356,6 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--r", type=int, default=None)
     s.add_argument("--basis", choices=["X", "Z"], default=None)
     s.add_argument("--test-frac", type=float, default=0.25)
+    s.add_argument("--split-strategy", choices=["iid", "chain", "snapshot"], default="iid")
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--parsed-dir", default="data/parsed")
     s.add_argument("--out", default=None)

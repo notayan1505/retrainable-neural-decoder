@@ -51,7 +51,9 @@ def test_baseline_learning_curve_matches_train_subsets(parsed, tmp_path):
     train, test = _split(parsed)
     fr = [0.5, 1.0]
     rows = baseline_learning_curve(train, test, fr, seed=0)
-    expect = {f: len(idx) for f, idx in learning_curve_subsets(len(train.labels), fr, 0)}
+    from qdrift.train import training_split_indices
+    expect = {f: len(training_split_indices(len(idx), 0.1, 0)[0])
+              for f, idx in learning_curve_subsets(len(train.labels), fr, 0)}
     assert {r["fraction"]: r["n_train"] for r in rows} == expect
     assert {r["decoder"] for r in rows} >= {"mwpm_fitted"}
     assert plot_learning_curve(rows, tmp_path / "lc.png").stat().st_size > 0

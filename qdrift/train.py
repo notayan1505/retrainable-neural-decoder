@@ -88,6 +88,16 @@ def _eval(model, X, y, dev, amp, bs=65536):
     return tot / max(n, 1), wrong / max(n, 1)
 
 
+def training_split_indices(n: int, val_frac: float = 0.1, seed: int = 0):
+    """Deterministically split indices into validation and optimizer-training subsets."""
+    if not 0.0 <= val_frac < 1.0:
+        raise ValueError("val_frac must be in [0, 1)")
+    perm = np.random.default_rng(seed).permutation(n)
+    nv = int(round(val_frac * n))
+    nv = min(max(nv, 1), n - 1) if n > 1 and val_frac > 0 else 0
+    return perm[nv:], perm[:nv]
+
+
 def train_model(train: Dataset, cfg: TrainConfig, val: Dataset | None = None,
                 log=print, model: nn.Module | None = None) -> tuple[nn.Module, list[dict]]:
     torch.manual_seed(cfg.seed)
@@ -99,11 +109,7 @@ def train_model(train: Dataset, cfg: TrainConfig, val: Dataset | None = None,
     amp = bool(cfg.amp) and dev.type == "cuda"
 
     if val is None:
-        rng = np.random.default_rng(cfg.seed)
-        perm = rng.permutation(len(train.labels))
-        nv = int(round(cfg.val_frac * len(perm)))
-        nv = min(max(nv, 1), len(perm) - 1) if len(perm) > 1 else 0
-        val_idx, tr_idx = perm[:nv], perm[nv:]
+        tr_idx, val_idx = training_split_indices(len(train.labels), cfg.val_frac, cfg.seed)
         Xv_np, yv_np = train.detectors[val_idx], train.labels[val_idx]
         Xt_np, yt_np = train.detectors[tr_idx], train.labels[tr_idx]
     else:
@@ -219,15 +225,17 @@ def learning_curve(train: Dataset, test: Dataset, cfg: TrainConfig,
     for f, idx in learning_curve_subsets(len(train.labels), fractions, cfg.seed):
         k = len(idx)
         sub = train.subset(idx)
+        fit_idx, val_idx = training_split_indices(k, cfg.val_frac, cfg.seed)
+        fit, val = sub.subset(fit_idx), sub.subset(val_idx)
         # Small subsets would get only a handful of optimizer steps at the full batch size and
         # look worse than they are, so keep at least ~32 steps per epoch.
-        sub_cfg = replace(cfg, batch_size=min(cfg.batch_size, max(64, k // 32)))
-        model, _ = train_model(sub, sub_cfg, log=lambda *_: None)
+        sub_cfg = replace(cfg, batch_size=min(cfg.batch_size, max(64, len(fit) // 32)))
+        model, _ = train_model(fit, sub_cfg, val=val, log=lambda *_: None)
         pred = predict(model, test.detectors, device=cfg.device and pick_device(cfg.device))
         errs = int((pred != test.labels).sum())
         n = len(test.labels)
         p = errs / max(n, 1)
-        row = {"decoder": f"nn_{cfg.kind}", "fraction": float(f), "n_train": int(k), "n_test": int(n),
+        row = {"decoder": f"nn_{cfg.kind}", "fraction": float(f), "n_train": int(len(fit)), "n_test": int(n),
                "errors": errs, "p_L": p, "stderr": float(np.sqrt(p * (1 - p) / max(n, 1)))}
         log(f"fraction {f:g} n_train {k} p_L {p:.4f} +- {row['stderr']:.4f}")
         rows.append(row)
