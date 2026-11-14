@@ -85,7 +85,7 @@ def _build_matching(d, r, edge_probs=None, pairs=None, bounds=None) -> pymatchin
 
 
 def fit_edge_probs(detectors: np.ndarray, diagonals: bool = True,
-                   boundary_floor: bool = True) -> dict:
+                   boundary_floor: bool = False) -> dict:
     """Pairwise (2-point correlation) estimate of every graph edge probability.
 
     A boundary probability is what is left of a detector's rate after its pair edges are
@@ -196,9 +196,10 @@ class MatchingFitted(_MatchingBase):
     """MWPM with weights log((1-p)/p) from pairwise detector correlations on the train set."""
     name = "mwpm_fitted"
 
-    def __init__(self, d=None, r=None, diagonals=True):
+    def __init__(self, d=None, r=None, diagonals=True, boundary_floor=False):
         super().__init__(d, r)
         self.diagonals = diagonals
+        self.boundary_floor = boundary_floor
         self.edge_probs: dict = {}
 
     def fit(self, train):
@@ -208,7 +209,7 @@ class MatchingFitted(_MatchingBase):
     def fit_detectors(self, detectors):
         detectors = np.asarray(detectors, dtype=np.uint8)
         self.r, self.d = detectors.shape[1] - 1, detectors.shape[2] + 1
-        self.edge_probs = fit_edge_probs(detectors, self.diagonals)
+        self.edge_probs = fit_edge_probs(detectors, self.diagonals, self.boundary_floor)
         self._m = self._make()
         return self
 
