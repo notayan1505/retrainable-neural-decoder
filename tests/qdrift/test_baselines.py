@@ -149,3 +149,13 @@ def test_real_ibm_fez():
     tr, te = split(ds)
     rows = run_baselines(ds.subset(tr), ds.subset(te))
     assert all(0 <= r["p_L"] <= 0.5 for r in rows)
+
+
+def test_wilson_interval():
+    from qdrift.decoders.baselines import wilson_interval
+    lo, hi = wilson_interval(0, 2048)
+    assert lo == 0.0 and 0.0 < hi < 0.002  # zero errors still gets a non-zero upper bar
+    lo, hi = wilson_interval(500, 1000)
+    se = math.sqrt(0.25 / 1000)
+    assert lo == pytest.approx(0.5 - se, rel=1e-3) and hi == pytest.approx(0.5 + se, rel=1e-3)
+    assert all(math.isnan(x) for x in wilson_interval(0, 0))

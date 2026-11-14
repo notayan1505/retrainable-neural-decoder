@@ -8,7 +8,7 @@ import numpy as np
 
 from qdrift.data.stein import DEFAULT_PARSED, Dataset, load_dataset, split
 from qdrift.decoders.baselines import (LookupTable, MatchingFitted, error_per_round, logical_error,
-                                       make_baselines, run_baselines)
+                                       make_baselines, run_baselines, wilson_interval)
 
 RESULTS = Path("results/qdrift")
 
@@ -121,10 +121,20 @@ def _plt():
     return plt
 
 
-def _eps_err(p, se, r):
-    lo, hi = max(p - se, 0.0), min(p + se, 0.499)
+def _bounds(row):
+    """Wilson interval from the row's error count; falls back to p +- stderr for old CSV rows."""
+    n, k = int(row.get("n_test") or 0), row.get("errors")
+    if n and k is not None:
+        return wilson_interval(int(k), n)
+    p, se = float(row["p_L"]), float(row["stderr"])
+    return max(p - se, 0.0), min(p + se, 1.0)
+
+
+def _eps_err(row):
+    p, r = float(row["p_L"]), int(row["r"])
+    lo, hi = _bounds(row)
     e = error_per_round(p, r)
-    return max(e - error_per_round(lo, r), 0.0), max(error_per_round(hi, r) - e, 0.0)
+    return max(e - error_per_round(lo, r), 0.0), max(error_per_round(min(hi, 0.499), r) - e, 0.0)
 
 
 def plot_error_vs_d(rows, path) -> Path:
@@ -141,12 +151,12 @@ def plot_error_vs_d(rows, path) -> Path:
         pts = sorted((r for r in rows if r["decoder"] == dec), key=lambda r: r["d"])
         x = [p["d"] for p in pts]
         y = [max(p["eps_round"], 1e-6) for p in pts]
-        err = np.array([_eps_err(p["p_L"], p["stderr"], p["r"]) for p in pts]).T
+        err = np.array([_eps_err(p) for p in pts]).T
         ax.errorbar(x, y, yerr=err, marker="o", capsize=3, label=dec)
     ax.set_yscale("log")
     ax.set_xticks(sorted(maxr))
     ax.set_xlabel("code distance d")
-    ax.set_ylabel("logical error per round")
+    ax.set_ylabel("logical error per round (Wilson 68% bars)")
     ax.set_title("Test backend: " + (", ".join(tb) if tb else "?") + " (largest r per d)")
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -162,11 +172,14 @@ def plot_learning_curve(rows, path) -> Path:
     fig, ax = plt.subplots(figsize=(6, 4))
     for dec in dict.fromkeys(r["decoder"] for r in rows):
         pts = sorted((r for r in rows if r["decoder"] == dec), key=lambda r: r["n_train"])
+        b = [_bounds(p) for p in pts]
+        yerr = [[max(p["p_L"] - lo, 0.0) for p, (lo, _) in zip(pts, b)],
+                [max(hi - p["p_L"], 0.0) for p, (_, hi) in zip(pts, b)]]
         ax.errorbar([p["n_train"] for p in pts], [p["p_L"] for p in pts],
-                    yerr=[p["stderr"] for p in pts], marker="o", capsize=3, label=dec)
+                    yerr=yerr, marker="o", capsize=3, label=dec)
     ax.set_xscale("log")
     ax.set_xlabel("training samples")
-    ax.set_ylabel("logical error p_L")
+    ax.set_ylabel("logical error p_L (Wilson 68% bars)")
     ax.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(path, dpi=130)

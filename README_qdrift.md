@@ -71,7 +71,7 @@ python -m qdrift train --backend ibm_fez --d 7 --r 5 --learning-curve --fraction
 python -m qdrift evaluate --backend ibm_fez --configs 3x3,7x5,9x7
 
 # 9. Generate fresh data on the FAKE (simulated) ibm_fez: safe, no account needed
-python -m qdrift run-ibm --backend ibm_fez --configs 3x3,7x5 --shots 1024
+python -m qdrift run-ibm --backend ibm_fez --configs 3x3,7x5 --shots 4096
 ```
 
 ### Drift test flow
@@ -99,6 +99,14 @@ Fine-tune a trained network on the new data:
 python -m qdrift train --backend ibm_fez_fresh --d 7 --r 5 --init results/qdrift/checkpoints/ibm_fez_d7_r5_mlp.pt --out results/qdrift/checkpoints/ibm_fez_fresh_d7_r5_mlp.pt
 ```
 (One line on purpose: the same command works in PowerShell and bash.)
+
+Score the fine-tuned network on the same fresh test split as the drift table (the split is fixed by `--seed`, so it is the identical test set):
+```bash
+python -m qdrift evaluate --backend ibm_fez_fresh --configs 7x5 --basis Z
+```
+Its `nn_mlp` row is the fine-tuned network. Compare it with `nn_mlp` from the drift table (trained on old data only) and with `mwpm_refit`.
+
+Sample size: the default `--shots 4096` with 4 chains gives 2 x 4 x 4096 = 32,768 samples per config, so about 8,000 in the 25% test split. That is enough to resolve a 1-point difference. With `--shots 1024` the test split is only about 2,000. Error bars in the plots are Wilson intervals (68%, the same coverage as +-1 standard error), which stay honest when a decoder makes 0 errors; the `+-` column in the tables is still the plain standard error.
 
 ## GPU settings
 - The whole dataset is moved to the GPU once. Use big batches: 8k to 64k (`--batch-size`).
