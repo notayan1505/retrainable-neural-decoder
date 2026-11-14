@@ -137,10 +137,10 @@ def test_split(tmp_path):
     assert set(both.snapshot[snap_tr]) | set(both.snapshot[snap_te]) == {0, 1}
 
     # Chain holdout keeps every shot from a physical chain (and both states) together.
-    c1 = parse_snapshot(write_stein_job(
+    c1 = stein.parse_snapshot(write_stein_job(
         tmp_path / "chain_a" / "d3_r2" / "job_0", 3, 2, shots=20, n_chains=4, seed=10
     ))
-    c2 = parse_snapshot(write_stein_job(
+    c2 = stein.parse_snapshot(write_stein_job(
         tmp_path / "chain_b" / "d3_r2" / "job_0", 3, 2, shots=20, n_chains=4, seed=11
     ))
     chained = concat([c1, c2])
