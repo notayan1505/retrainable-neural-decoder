@@ -52,11 +52,18 @@ def test_train_eval_init_curve(parsed_tree, tmp_path, capsys):
               "--width", "16", "--depth", "1", "--batch-size", "256"]
     assert main(["train", *common, "--out", str(ck / "synthA_d3_r3_mlp.pt")]) == 0
     assert (ck / "synthA_d3_r3_mlp.pt").exists()
+    import torch
+    saved = torch.load(ck / "synthA_d3_r3_mlp.pt", map_location="cpu", weights_only=True)
+    assert len(saved["extra"]["dataset_fingerprint"]) == 64
     capsys.readouterr()
     od = tmp_path / "ev"
     assert main(["evaluate", "--backend", "synthA", "--configs", "3x3", *_args(t), "--ckpt-dir", str(ck),
                  "--out-dir", str(od), "--device", "cpu"]) == 0
     assert "nn_mlp" in capsys.readouterr().out
+    # A checkpoint trained with IID splitting must reject a different evaluation split.
+    assert main(["evaluate", "--backend", "synthA", "--configs", "3x3", *_args(t), "--ckpt-dir", str(ck),
+                 "--split-strategy", "chain", "--out-dir", str(od), "--device", "cpu"]) == 2
+    assert "split_strategy" in capsys.readouterr().err
     assert main(["evaluate", "--backend", "synthA", "--configs", "3x3", *_args(t), "--ckpt-dir", str(ck),
                  "--test-backend", "synthB", "--out-dir", str(od), "--device", "cpu"]) == 0
     rows = list(csv.DictReader(open(od / "eval_synthA_on_synthB.csv")))
@@ -87,9 +94,10 @@ def test_evaluate_missing_test_backend_is_an_error(parsed_tree, tmp_path, capsys
     assert not od.exists()
 
 
-def test_run_ibm_fake_refuses_fresh_label(tmp_path, capsys):
-    assert main(["run-ibm", "--configs", "3x1", "--label", "ibm_fez_fresh", "--raw-dir", str(tmp_path)]) == 2
-    assert "reserved" in capsys.readouterr().err
+def test_run_ibm_rejects_noncanonical_labels(tmp_path, capsys):
+    for label in ("ibm_fez_fresh", "ibm_fez", "custom_fake"):
+        assert main(["run-ibm", "--configs", "3x1", "--label", label, "--raw-dir", str(tmp_path)]) == 2
+        assert "reserved" in capsys.readouterr().err
     assert not any(tmp_path.iterdir())
 
 

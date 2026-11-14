@@ -280,6 +280,11 @@ def _next_job(folder: Path) -> Path:
 def run_ibm(backend_name: str, out_root, configs: list[tuple[int, int, str]], shots: int = 1024,
             n_chains: int = 4, real: bool = False, seed: int = 0,
             label: str | None = None) -> list[Path]:
+    expected_label = f"{backend_name}_{'fresh' if real else 'fake'}"
+    if label is not None and label != expected_label:
+        raise ValueError(f"run labels are reserved: use {expected_label!r}; custom labels could mix "
+                         "simulated or fresh data with historical datasets")
+    label = expected_label
     if real:
         token = os.environ.get("QISKIT_IBM_TOKEN")
         if not token:

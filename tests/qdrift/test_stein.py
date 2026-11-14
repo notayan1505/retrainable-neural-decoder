@@ -7,7 +7,7 @@ import pytest
 
 from qdrift.data import stein
 from qdrift.data.stein import (
-    concat, detectors_from_raw, load_dataset, load_snapshot, parse_backend, parse_snapshot,
+    concat, dataset_fingerprint, detectors_from_raw, load_dataset, load_snapshot, parse_backend, parse_snapshot,
     save_snapshot, split,
 )
 from qdrift.data.synthetic import (
@@ -112,6 +112,16 @@ def test_parse_backend_and_load(tmp_path, workers):
         load_dataset("synthetic", 5, 3, parsed_dir=parsed)
     with pytest.raises(FileNotFoundError, match="qdrift"):
         load_dataset("synthetic", 3, 3, parsed_dir=tmp_path / "none")
+
+
+def test_dataset_fingerprint_is_stable_and_sensitive():
+    ds = make_dataset(3, 3, n_per_state=32, seed=4)
+    original = dataset_fingerprint(ds)
+    assert len(original) == 64
+    assert dataset_fingerprint(ds) == original
+    changed = ds.subset(np.arange(len(ds)))
+    changed.detectors[0, 0, 0] ^= 1
+    assert dataset_fingerprint(changed) != original
 
 
 def test_split(tmp_path):

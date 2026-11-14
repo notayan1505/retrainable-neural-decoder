@@ -58,7 +58,7 @@ python -m qdrift index
 python -m qdrift baseline --backend ibm_fez --d 5
 
 # 5. Train one neural decoder (saved in results/qdrift/checkpoints)
-python -m qdrift train --backend ibm_fez --d 7 --r 5 --kind mlp
+python -m qdrift train --backend ibm_fez --d 7 --r 5 --basis Z --kind mlp
 
 # 6. Several configs, three at a time (logs in results/qdrift/logs)
 python -m qdrift sweep --backend ibm_fez --configs 7x5,9x7,11x11 --kinds mlp,conv --jobs 3
@@ -68,7 +68,7 @@ python -m qdrift sweep --backend ibm_fez --configs 7x5,9x7,11x11 --kinds mlp,con
 python -m qdrift train --backend ibm_fez --d 7 --r 5 --learning-curve --fractions 0.01,0.03,0.1,0.3,1.0
 
 # 8. Evaluate baselines plus any saved checkpoints; writes a CSV and a PNG
-python -m qdrift evaluate --backend ibm_fez --configs 3x3,7x5,9x7
+python -m qdrift evaluate --backend ibm_fez --configs 3x3,7x5,9x7 --basis Z
 
 # 9. Generate fresh data on the FAKE (simulated) ibm_fez: safe, no account needed
 python -m qdrift run-ibm --backend ibm_fez --configs 3x3,7x5 --shots 4096
@@ -96,7 +96,7 @@ The table includes `mwpm_refit` and `lookup_refit`: classic decoders refitted on
 
 Fine-tune a trained network on the new data:
 ```bash
-python -m qdrift train --backend ibm_fez_fresh --d 7 --r 5 --init results/qdrift/checkpoints/ibm_fez_d7_r5_mlp.pt --out results/qdrift/checkpoints/ibm_fez_fresh_d7_r5_mlp.pt
+python -m qdrift train --backend ibm_fez_fresh --d 7 --r 5 --basis Z --init results/qdrift/checkpoints/ibm_fez_d7_r5_z_mlp.pt --out results/qdrift/checkpoints/ibm_fez_fresh_d7_r5_z_mlp.pt
 ```
 (One line on purpose: the same command works in PowerShell and bash.)
 
@@ -122,6 +122,11 @@ Sample size: the default `--shots 4096` with 4 chains gives 2 x 4 x 4096 = 32,76
 - Logical state 1 is much noisier than state 0 (see `p_L|1` versus `p_L|0` in the tables).
 - Detectors fire often: about 5 to 30 percent of the time.
 - Train and test splits are fixed by `--seed` and `--test-frac`, per snapshot and state, so all decoders see the same test set.
+
+## Reproducibility notes
+- Checkpoints now use basis-specific names (`all`, `x`, or `z`) and record the dataset fingerprint, outer split strategy, seed, and test fraction.
+- Evaluation refuses changed datasets and mismatched or incomplete split metadata. Retrain checkpoints created before this change before using them with the updated evaluator.
+- New hardware and simulated runs are restricted to canonical `<backend>_fresh` and `<backend>_fake` labels.
 
 ## Tests
 ```bash

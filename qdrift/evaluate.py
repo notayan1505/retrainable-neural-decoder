@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from qdrift.data.stein import DEFAULT_PARSED, Dataset, load_dataset, split
+from qdrift.data.stein import DEFAULT_PARSED, Dataset, dataset_fingerprint, load_dataset, split
 from qdrift.decoders.baselines import (LookupTable, MatchingFitted, error_per_round, logical_error,
                                        make_baselines, run_baselines, wilson_interval)
 
@@ -51,12 +51,33 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
             from qdrift.models.net import MODEL_KINDS
             from qdrift.train import NNDecoder, TrainConfig, load_checkpoint, pick_device
             for kind in MODEL_KINDS:
-                p = Path(ckpt_dir) / f"{backend}_d{d}_r{r}_{kind}.pt"
+                basis_tag = (basis or "all").lower()
+                p = Path(ckpt_dir) / f"{backend}_d{d}_r{r}_{basis_tag}_{kind}.pt"
+                legacy = Path(ckpt_dir) / f"{backend}_d{d}_r{r}_{kind}.pt"
+                if not p.exists() and legacy.exists():
+                    p = legacy
                 if p.exists():
-                    # Run on THIS machine's device. The checkpoint records the device it was
-                    # trained on (e.g. "cuda"), which may not exist here.
+                    # Checkpoints are only comparable when evaluated with their original split
+                    # and basis. Refuse silent leakage or basis mismatches.
                     dev = pick_device(device)
                     model, info = load_checkpoint(p, dev)
+                    extra = info.get("extra", {})
+                    expected_metadata = {
+                        "basis": basis, "seed": seed, "test_frac": test_frac,
+                        "dataset_fingerprint": dataset_fingerprint(ds),
+                    }
+                    for key, requested in expected_metadata.items():
+                        if key not in extra:
+                            raise ValueError(f"checkpoint {p} is missing {key} metadata; retrain it before evaluation")
+                        if extra[key] != requested:
+                            raise ValueError(f"checkpoint {p} was trained with {key}={extra[key]!r}, "
+                                             f"but evaluation requested {requested!r}")
+                    if "split_strategy" not in extra:
+                        raise ValueError(f"checkpoint {p} predates split metadata; retrain it before evaluation")
+                    saved_strategy = extra["split_strategy"]
+                    if saved_strategy != split_strategy:
+                        raise ValueError(f"checkpoint {p} was trained with split_strategy={saved_strategy!r}, "
+                                         f"but evaluation requested {split_strategy!r}")
                     cfg = TrainConfig(**{**info["cfg"], "device": str(dev)})
                     nns.append(NNDecoder(cfg, model=model, device=dev))
         # Checkpoints trained with an inner validation holdout saw fewer optimizer samples.
@@ -64,6 +85,9 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
         baseline_train = train
         if nns:
             cfg = nns[0].cfg
+            if any((nn.cfg.val_frac, nn.cfg.seed) != (cfg.val_frac, cfg.seed) for nn in nns[1:]):
+                raise ValueError("checkpoints use different validation fractions or training seeds; "
+                                 "evaluate them separately for a fair baseline comparison")
             fit_idx, _ = split(train, cfg.val_frac, cfg.seed + 1, strategy=split_strategy)
             baseline_train = train.subset(fit_idx)
         base_rows = run_baselines(baseline_train, test)
@@ -80,7 +104,7 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
             train2, test2 = ds2.subset(tr2), ds2.subset(te2)
             decs = make_baselines(d, r)
             fitted = [_Fitted(x.fit(baseline_train)) for x in decs] + [_Fitted(nn) for nn in nns]
-            rows = run_baselines(train, test2, decoders=fitted)
+            rows = run_baselines(baseline_train, test2, decoders=fitted)
             refit = [MatchingFitted(d, r, diagonals=True)]
             refit[0].name = "mwpm_refit"
             if any(isinstance(x, LookupTable) for x in decs):

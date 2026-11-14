@@ -140,7 +140,7 @@ def cmd_train(a) -> int:
     import torch
     from qdrift.decoders.baselines import format_table
     from qdrift.evaluate import (baseline_learning_curve, evaluate_config, plot_learning_curve, write_csv)
-    from qdrift.data.stein import split
+    from qdrift.data.stein import dataset_fingerprint, split
     from qdrift.train import (NNDecoder, TrainConfig, learning_curve, load_checkpoint, pick_device,
                               save_checkpoint, train_model)
     backends = _csv_list(a.backend)
@@ -168,7 +168,8 @@ def cmd_train(a) -> int:
             raise ValueError(f"--init checkpoint is for d={info['d']} r={info['r']}, not d={a.d} r={a.r}")
         cfg.kind, cfg.width, cfg.depth, cfg.dropout = c["kind"], c["width"], c["depth"], c["dropout"]
         print(f"fine-tuning from {a.init} ({cfg.kind} width={cfg.width} depth={cfg.depth})")
-    stem = f"{tag}_d{a.d}_r{a.r}_{cfg.kind}"
+    basis_tag = (a.basis or "all").lower()
+    stem = f"{tag}_d{a.d}_r{a.r}_{basis_tag}_{cfg.kind}"
     try:
         if a.learning_curve:
             fr = _fractions(a.fractions)
@@ -190,7 +191,9 @@ def cmd_train(a) -> int:
     print(format_table(rows))
     ckpt = Path(a.out) if a.out else RESULTS / "checkpoints" / f"{stem}.pt"
     save_checkpoint(ckpt, model, cfg, a.d, a.r, extra={"backend": tag, "basis": a.basis, "seed": a.seed,
-                                                       "test_frac": a.test_frac, "init": a.init})
+                                                       "test_frac": a.test_frac, "split_strategy": a.split_strategy,
+                                                       "dataset_fingerprint": dataset_fingerprint(ds),
+                                                       "init": a.init})
     write_csv(hist, ckpt.with_name(ckpt.stem + "_history.csv"))
     write_csv(rows, ckpt.with_name(ckpt.stem + "_rows.csv"))
     print(f"saved checkpoint {ckpt}")
@@ -306,10 +309,11 @@ def cmd_evaluate(a) -> int:
 
 def cmd_run_ibm(a) -> int:
     configs = [(d, r, (a.basis or "Z").upper()) for d, r in _parse_configs(a.configs)]
-    label = a.label or (f"{a.backend}_fresh" if a.real else f"{a.backend}_fake")
-    if not a.real and label.endswith("_fresh"):
-        raise ValueError(f"label {label!r} is reserved for real hardware runs; simulated data would get mixed "
-                         f"into it. Use the default ({a.backend}_fake) or another label, or add --real.")
+    expected_label = f"{a.backend}_{'fresh' if a.real else 'fake'}"
+    if a.label is not None and a.label != expected_label:
+        raise ValueError(f"run labels are reserved: use {expected_label!r}; custom labels could mix "
+                         "simulated or fresh data with historical datasets.")
+    label = expected_label
     out_root = Path(a.raw_dir) / label  # run_ibm writes <out_root>/<label>/d<D>_r<R>/job_<n>
     n_circ = 2 * len(configs)
     if a.real:
@@ -393,6 +397,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--test-backend", default=None)
     s.add_argument("--test-frac", type=float, default=0.25)
     s.add_argument("--seed", type=int, default=0)
+    s.add_argument("--split-strategy", choices=["iid", "chain", "snapshot"], default="iid")
     s.add_argument("--device", default=None)
     s.add_argument("--parsed-dir", default="data/parsed")
     s.add_argument("--out-dir", default=None)
