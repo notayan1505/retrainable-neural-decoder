@@ -1,6 +1,6 @@
 """Training loop for the neural decoders.
 
-RTX 5070 Ti (Blackwell, 16 GB) notes:
+RTX 5070 Ti (Blackwell, approximately 12 GB VRAM) notes:
   * Needs a CUDA 12.8+ torch build, e.g.
     ``pip install torch --index-url https://download.pytorch.org/whl/cu128``.
   * The whole dataset lives on the GPU as uint8; use large batches (8k-64k).
@@ -237,7 +237,7 @@ def learning_curve(train: Dataset, test: Dataset, cfg: TrainConfig,
         p = errs / max(n, 1)
         row = {"decoder": f"nn_{cfg.kind}", "fraction": float(f), "n_train": int(len(fit)), "n_test": int(n),
                "errors": errs, "p_L": p, "stderr": float(np.sqrt(p * (1 - p) / max(n, 1)))}
-        log(f"fraction {f:g} n_train {k} p_L {p:.4f} +- {row['stderr']:.4f}")
+        log(f"fraction {f:g} n_train {len(fit)} p_L {p:.4f} +- {row['stderr']:.4f}")
         rows.append(row)
     return rows
 
