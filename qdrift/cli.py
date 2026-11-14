@@ -178,7 +178,7 @@ def cmd_train(a) -> int:
             png = plot_learning_curve(rows, csv_path.with_suffix(".png"))
             print(f"wrote {csv_path}\nwrote {png}")
             return 0
-        fit_idx, val_idx = split(train, cfg.val_frac, cfg.seed + 1, strategy=a.split_strategy)
+        fit_idx, val_idx = split(train, cfg.val_frac, cfg.seed + 1, strategy="iid")
         fit_train, val = train.subset(fit_idx), train.subset(val_idx)
         model, hist = train_model(fit_train, cfg, val=val, log=print, model=init_model)
     except RuntimeError as e:
