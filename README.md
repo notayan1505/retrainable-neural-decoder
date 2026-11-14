@@ -1,12 +1,12 @@
 # Learning a Chip's Noise: A Neural Decoder Trained on Real IBM Data
 
-QuantUM Qiskit Fall Fest 2026 · 3-hour build · status: plan v3, approved to build. This file is the single source of truth.
+QuantUM Qiskit Fall Fest 2026
 
 ## Goal
 A neural decoder trained on **real IBM hardware data** and compared fairly against PyMatching,
 built on Qiskit, with an open, one-command retrain.
 
-## Plain-English background
+## Background
 Error correction spreads one logical bit over several physical qubits and keeps measuring
 parity checks. A **decoder** reads the check results and guesses whether the stored bit
 flipped. PyMatching is the standard decoder: fast and strong, but only as good as the noise
@@ -94,24 +94,10 @@ Our contribution:
 - AlphaQubit 1/2 (Google DeepMind): weights not public as far as we found.
 - Lange et al. 2023: open GNN decoder.
 
-## 3-hour schedule
-| Time | Task |
-|---|---|
-| 0:00–0:40 | Download Stein data, read the README, write the parser (bitstrings → detectors + labels). Sanity check: detector rates are low, and the label is balanced across state0/state1 |
-| 0:40–1:10 | Decoders 0–3 on d=3 and d=7; first table. **Submit our IBM job here** so it runs while we work |
-| 1:10–2:00 | NN training on GPU, d=7–11, r ≥ 5; learning curve |
-| 2:00–2:30 | Evaluate everything on our fresh IBM runs (drift test) |
-| 2:30–3:00 | Plots, slides, rehearse |
-
 ## Hardware and environment
 
-**Dev machine:** a Mac (Apple Silicon, MPS). Code is written and smoke-tested here on small
-data. The `.venv` in the project root already has qiskit 2.6, qiskit-aer 0.18,
-qiskit-ibm-runtime 0.52, stim 1.16, PyMatching 2.4, torch 2.15 and numpy.
-
 **Training machine:** a separate laptop with an **NVIDIA RTX 5070 Ti** (Blackwell, sm_120, 16 GB).
-The code is copied over and run there. Its OS is unknown, so everything must work on
-**Windows and Linux**: use `pathlib`, no shell-specific scripts, `num_workers=0`.
+The code is copied over and run there.
 
 5070 Ti optimizations (all automatic, falling back cleanly on Mac/CPU):
 - **PyTorch built for CUDA 12.8 or newer is required** for Blackwell. The README must give
