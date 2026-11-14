@@ -131,6 +131,28 @@ def test_split(tmp_path):
     assert np.array_equal(te[te < len(a)], te_a)
     assert len(both.subset(te)) == len(te) and both.subset(te).metas is both.metas
 
+    # Snapshot holdout never places samples from one calibration session in both sets.
+    snap_tr, snap_te = split(both, 0.5, seed=4, strategy="snapshot")
+    assert set(both.snapshot[snap_tr]).isdisjoint(set(both.snapshot[snap_te]))
+    assert set(both.snapshot[snap_tr]) | set(both.snapshot[snap_te]) == {0, 1}
+
+    # Chain holdout keeps every shot from a physical chain (and both states) together.
+    c1 = parse_snapshot(write_stein_job(
+        tmp_path / "chain_a" / "d3_r2" / "job_0", 3, 2, shots=20, n_chains=4, seed=10
+    ))
+    c2 = parse_snapshot(write_stein_job(
+        tmp_path / "chain_b" / "d3_r2" / "job_0", 3, 2, shots=20, n_chains=4, seed=11
+    ))
+    chained = concat([c1, c2])
+    chain_tr, chain_te = split(chained, 0.25, seed=2, strategy="chain")
+    for snap in np.unique(chained.snapshot):
+        tr_chains = set(chained.chain[chain_tr[chained.snapshot[chain_tr] == snap]])
+        te_chains = set(chained.chain[chain_te[chained.snapshot[chain_te] == snap]])
+        assert tr_chains.isdisjoint(te_chains)
+        assert tr_chains | te_chains == {0, 1, 2, 3}
+    with pytest.raises(ValueError, match="at least two chains"):
+        split(a, 0.25, seed=0, strategy="chain")
+
 
 def _make_tar(path, add):
     with tarfile.open(path, "w:gz") as tf:
