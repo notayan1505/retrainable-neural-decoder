@@ -64,7 +64,7 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
         baseline_train = train
         if nns:
             cfg = nns[0].cfg
-            fit_idx, _ = split(train, cfg.val_frac, cfg.seed + 1, strategy=split_strategy)
+            fit_idx, _ = split(train, cfg.val_frac, cfg.seed + 1, strategy="iid")
             baseline_train = train.subset(fit_idx)
         base_rows = run_baselines(baseline_train, test)
         for nn in nns:
