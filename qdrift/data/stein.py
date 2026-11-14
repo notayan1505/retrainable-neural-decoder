@@ -356,24 +356,60 @@ def load_dataset(backends, d, r, basis=None, parsed_dir=DEFAULT_PARSED, snapshot
     return concat(load_snapshot(m["path"]) for m in sel)
 
 
-def split(ds: Dataset, test_frac=0.25, seed=0):
-    """Deterministic per-(snapshot, state) split; independent of other snapshots in ds."""
+def split(ds: Dataset, test_frac=0.25, seed=0, strategy="iid"):
+    """Return train/test indices using IID, held-out-chain, or held-out-snapshot splitting.
+
+    iid preserves the original per-(snapshot, state) shot split. chain holds out complete
+    physical chains within each snapshot (both prepared states stay together). snapshot
+    holds out complete snapshots and tests transfer across calibration sessions.
+    """
+    if not 0.0 < test_frac < 1.0:
+        raise ValueError("test_frac must be between 0 and 1")
+    if strategy not in {"iid", "chain", "snapshot"}:
+        raise ValueError("strategy must be one of: iid, chain, snapshot")
+
     n = len(ds)
-    key = ds.snapshot.astype(np.int64) * 2 + ds.states.astype(np.int64)
-    order = np.argsort(key, kind="stable")
-    sk = key[order]
-    bounds = np.flatnonzero(np.diff(sk)) + 1
-    test_parts = []
-    for grp in np.split(order, bounds):
-        if grp.size == 0:
-            continue
-        k = int(key[grp[0]])
-        snap_id, state = ds.metas[k // 2]["snapshot"], k % 2
-        rng = np.random.default_rng([seed, zlib.crc32(snap_id.encode()), state])
-        perm = rng.permutation(grp.size)
-        n_test = int(round(test_frac * grp.size))
-        test_parts.append(grp[perm[:n_test]])
-    test_idx = np.sort(np.concatenate(test_parts)) if test_parts else np.zeros(0, dtype=np.int64)
+    if strategy == "iid":
+        key = ds.snapshot.astype(np.int64) * 2 + ds.states.astype(np.int64)
+        order = np.argsort(key, kind="stable")
+        sk = key[order]
+        bounds = np.flatnonzero(np.diff(sk)) + 1
+        test_parts = []
+        for grp in np.split(order, bounds):
+            if grp.size == 0:
+                continue
+            k = int(key[grp[0]])
+            snap_id, state = ds.metas[k // 2]["snapshot"], k % 2
+            rng = np.random.default_rng([seed, zlib.crc32(snap_id.encode()), state])
+            perm = rng.permutation(grp.size)
+            n_test = min(max(int(round(test_frac * grp.size)), 1), grp.size - 1) if grp.size > 1 else 0
+            test_parts.append(grp[perm[:n_test]])
+        test_idx = np.sort(np.concatenate(test_parts)) if test_parts else np.zeros(0, dtype=np.int64)
+    elif strategy == "snapshot":
+        groups = np.unique(ds.snapshot)
+        if len(groups) < 2:
+            raise ValueError("snapshot split requires at least two snapshots")
+        rng = np.random.default_rng(seed)
+        n_test = min(max(int(round(test_frac * len(groups))), 1), len(groups) - 1)
+        held = groups[rng.permutation(len(groups))[:n_test]]
+        test_idx = np.flatnonzero(np.isin(ds.snapshot, held))
+    else:
+        test_mask = np.zeros(n, dtype=bool)
+        for snap in np.unique(ds.snapshot):
+            rows = np.flatnonzero(ds.snapshot == snap)
+            chains = np.unique(ds.chain[rows])
+            if len(chains) < 2:
+                raise ValueError(
+                    f"chain split requires at least two chains per snapshot; snapshot "
+                    f"{ds.metas[int(snap)].get('snapshot', snap)!r} has {len(chains)}"
+                )
+            snap_id = ds.metas[int(snap)]["snapshot"]
+            rng = np.random.default_rng([seed, zlib.crc32(snap_id.encode())])
+            n_test = min(max(int(round(test_frac * len(chains))), 1), len(chains) - 1)
+            held = chains[rng.permutation(len(chains))[:n_test]]
+            test_mask[rows[np.isin(ds.chain[rows], held)]] = True
+        test_idx = np.flatnonzero(test_mask)
+
     mask = np.ones(n, dtype=bool)
     mask[test_idx] = False
     return np.flatnonzero(mask), test_idx
