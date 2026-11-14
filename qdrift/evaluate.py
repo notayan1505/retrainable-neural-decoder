@@ -63,9 +63,8 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
         # Fit the comparison baselines on that exact-size training partition as well.
         baseline_train = train
         if nns:
-            from qdrift.train import training_split_indices
             cfg = nns[0].cfg
-            fit_idx, _ = training_split_indices(len(train), cfg.val_frac, cfg.seed + 1)
+            fit_idx, _ = split(train, cfg.val_frac, cfg.seed + 1, strategy=split_strategy)
             baseline_train = train.subset(fit_idx)
         base_rows = run_baselines(baseline_train, test)
         for nn in nns:
