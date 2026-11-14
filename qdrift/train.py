@@ -237,7 +237,7 @@ def learning_curve(train: Dataset, test: Dataset, cfg: TrainConfig,
         p = errs / max(n, 1)
         row = {"decoder": f"nn_{cfg.kind}", "fraction": float(f), "n_train": int(len(fit)), "n_test": int(n),
                "errors": errs, "p_L": p, "stderr": float(np.sqrt(p * (1 - p) / max(n, 1)))}
-        log(f"fraction {f:g} n_train {k} p_L {p:.4f} +- {row['stderr']:.4f}")
+        log(f"fraction {f:g} n_train {len(fit)} p_L {p:.4f} +- {row['stderr']:.4f}")
         rows.append(row)
     return rows
 
