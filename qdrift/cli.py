@@ -392,6 +392,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--ckpt-dir", default=str(RESULTS / "checkpoints"))
     s.add_argument("--test-backend", default=None)
     s.add_argument("--test-frac", type=float, default=0.25)
+    s.add_argument("--split-strategy", choices=["iid", "chain", "snapshot"], default="iid")
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--device", default=None)
     s.add_argument("--parsed-dir", default="data/parsed")
