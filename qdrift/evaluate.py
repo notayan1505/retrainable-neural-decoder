@@ -85,12 +85,12 @@ def evaluate(backend, configs, basis=None, ckpt_dir=None, test_backend=None, tes
     return out
 
 
-def baseline_learning_curve(train: Dataset, test: Dataset, fractions, seed=0) -> list[dict]:
+def baseline_learning_curve(train: Dataset, test: Dataset, fractions, seed=0, val_frac=0.1) -> list[dict]:
     from qdrift.train import learning_curve_subsets, training_split_indices
     rows = []
     for f, idx in learning_curve_subsets(len(train.labels), fractions, seed):
         sub = train.subset(idx)
-        fit_idx, _ = training_split_indices(len(idx), 0.1, seed)
+        fit_idx, _ = training_split_indices(len(idx), val_frac, seed)
         fit = sub.subset(fit_idx)
         decs = [x for x in make_baselines(train.d, train.r) if x.name in ("mwpm_fitted", "lookup")]
         for dec in decs:
