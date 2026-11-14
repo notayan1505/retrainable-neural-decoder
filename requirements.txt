@@ -1,0 +1,13 @@
+# torch is installed separately, BEFORE this file:
+#   RTX 5070 Ti (needs CUDA 12.8+ wheel): pip install torch --index-url https://download.pytorch.org/whl/cu128
+#   Mac / CPU only:                        pip install torch
+# Tested on the Mac (2026-11-14) with: numpy 2.5.4, stim 1.16.0, pymatching 2.4.0, qiskit 2.6.2,
+# qiskit-aer 0.18.2, qiskit-ibm-runtime 0.52.1, matplotlib 3.11.2, pytest 9.2.0, torch 2.15.0.
+numpy
+stim
+pymatching
+qiskit>=2.0
+qiskit-aer
+qiskit-ibm-runtime
+matplotlib
+pytest
